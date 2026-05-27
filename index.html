@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>每周待办</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">每周待办</div>
+      <div class="week-info" id="weekInfo"></div>
+      <div class="window-controls">
+        <button id="minimizeBtn" class="control-btn">—</button>
+        <button id="closeBtn" class="control-btn">×</button>
+      </div>
+    </div>
+    
+    <div class="week-nav">
+      <button id="prevWeek" class="nav-btn">&lt;</button>
+      <span id="currentWeek" class="week-display"></span>
+      <button id="nextWeek" class="nav-btn">&gt;</button>
+    </div>
+    
+    <div class="days-container" id="daysContainer"></div>
+    
+    <div class="add-todo-section">
+      <button id="addTodoBtn" class="add-btn">+ 添加待办</button>
+    </div>
+  </div>
+  
+  <div id="todoModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="modalTitle">添加待办事项</span>
+        <span id="closeModal" class="close">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>选择日期</label>
+          <select id="todoDate"></select>
+        </div>
+        <div class="form-group">
+          <label>待办事项</label>
+          <input type="text" id="todoTitle" placeholder="输入待办事项">
+        </div>
+        <div class="form-group">
+          <label>关键操作</label>
+          <textarea id="todoNotes" placeholder="输入关键操作备注"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelBtn" class="btn btn-secondary">取消</button>
+        <button id="saveBtn" class="btn btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
