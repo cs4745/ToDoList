@@ -1,0 +1,26 @@
+{
+  "name": "weekly-todo-widget",
+  "version": "1.0.0",
+  "description": "Windows桌面组件 - 每周待办事项管理",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.weeklytodo.widget",
+    "productName": "每周待办",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    }
+  },
+  "keywords": ["electron", "todo", "widget"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {}
+}
