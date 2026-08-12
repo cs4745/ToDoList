@@ -90,4 +90,4 @@ D:\Tools\todos.json        <- 数据在这里
 
 ## 界面预览
 
-![每周待办主界面](./assets/screenshot.png)
+<img src="./assets/screenshot.png" alt="每周待办主界面" width="360" />
