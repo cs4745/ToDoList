@@ -2,8 +2,6 @@
 
 一个轻量的 Windows 桌面待办组件，专为「按周管理」设计。单文件便携版，双击即用，数据保存在 exe 同目录，适合放在桌面或 U 盘随身携带。
 
-![每周待办主界面](./assets/screenshot.png)
-
 ## 功能特点
 
 ### 任务管理
@@ -89,3 +87,7 @@ D:\Tools\todos.json        <- 数据在这里
 ├── dist/                # 构建产物 (git 忽略)
 └── release/             # 发布用的成品 exe (git 忽略，仅作本地 Release 附件)
 ```
+
+## 界面预览
+
+![每周待办主界面](./assets/screenshot.png)
