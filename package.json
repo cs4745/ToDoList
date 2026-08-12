@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win",
+    "build": "set NODE_OPTIONS= && electron-builder --win",
     "build:portable": "electron-builder --win portable",
     "build:nsis": "electron-builder --win nsis",
     "pack": "electron-builder --win --dir"
@@ -22,30 +22,22 @@
       "index.html",
       "renderer.js",
       "styles.css",
-      "package.json"
+      "package.json",
+      "assets/**/*"
     ],
+    "icon": "assets/icon.ico",
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
-        },
-        {
-          "target": "nsis",
           "arch": ["x64"]
         }
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "每周待办"
-    },
     "portable": {
-      "artifactName": "${productName}-${version}-便携版.exe"
+      "artifactName": "WeeklyTodo-${version}-portable.exe"
     }
   },
   "keywords": ["electron", "todo", "widget"],

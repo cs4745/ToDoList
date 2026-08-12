@@ -8,7 +8,7 @@
 npm run build:portable
 ```
 
-生成文件：`dist/每周待办-1.0.0-便携版.exe`
+生成文件：`dist/WeeklyTodo-1.0.0-portable.exe`
 - 单个 exe 文件，无需安装，双击即可运行
 - 适合放在桌面或U盘使用
 
@@ -18,7 +18,7 @@ npm run build:portable
 npm run build:nsis
 ```
 
-生成文件：`dist/每周待办-1.0.0-x64.exe`
+生成文件：`dist/每周待办 Setup 1.0.0.exe`（nsis 默认命名，可在 package.json 的 `nsis.artifactName` 自定义）
 - 带安装向导的安装程序
 - 可选择安装路径
 - 自动创建桌面快捷方式和开始菜单
@@ -58,7 +58,7 @@ $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-
 
 ```powershell
 # 1. 进入项目目录
-cd G:\AI\Workspaces\Trae\ToDoList
+cd F:\Workspaces\Trae\ToDoList
 
 # 2. 设置镜像源
 $env:ELECTRON_MIRROR = "https://cdn.npmmirror.com/binaries/electron/"
@@ -74,8 +74,8 @@ npm run build:portable
 ## 输出位置
 
 所有打包文件都在 `dist` 目录中：
-- `dist/每周待办-1.0.0-便携版.exe` - 便携版
-- `dist/每周待办-1.0.0-x64.exe` - 安装包
+- `dist/WeeklyTodo-1.0.0-portable.exe` - 便携版（自包含单文件，推荐）
+- `dist/每周待办 Setup 1.0.0.exe` - 安装包
 - `dist/win-unpacked/` - 解压版目录
 
 ## 常见问题
@@ -92,8 +92,5 @@ A: 设置环境变量后重试：
 $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
 ```
 
-### Q: 如何添加应用图标？
-A: 将 `icon.ico` 文件放在项目根目录，然后在 package.json 的 build.win 中添加：
-```json
-"icon": "icon.ico"
-```
+### Q: 如何更换应用图标？
+A: 图标已配置为 `assets/icon.ico`（在 package.json 的 `build.win.icon` 中指定），直接替换 `assets/icon.ico` 后重新 `npm run build` 即可。注意：不要用 rcedit 在打包后修改 exe 图标，会把便携 exe 截断损坏。

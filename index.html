@@ -9,49 +9,75 @@
   <div class="container">
     <div class="header">
       <div class="title">每周待办</div>
-      <div class="week-info" id="weekInfo"></div>
+      <div class="week-label" id="weekLabel"></div>
       <div class="window-controls">
+        <button id="settingsBtn" class="control-btn gear" title="设置">⚙</button>
         <button id="minimizeBtn" class="control-btn">—</button>
         <button id="closeBtn" class="control-btn">×</button>
       </div>
     </div>
-    
-    <div class="week-nav">
-      <button id="prevWeek" class="nav-btn">&lt;</button>
-      <span id="currentWeek" class="week-display"></span>
-      <button id="nextWeek" class="nav-btn">&gt;</button>
+
+    <div class="body" id="body">
+      <section class="task-section">
+        <div class="section-head">
+          <span class="section-title">短期任务 · 本周</span>
+          <button class="add-inline" data-cat="short">+ 添加</button>
+        </div>
+        <div class="todo-list" id="shortList"></div>
+      </section>
+
+      <section class="task-section">
+        <div class="section-head">
+          <span class="section-title">长期任务</span>
+          <button class="add-inline" data-cat="long">+ 添加</button>
+        </div>
+        <div class="todo-list" id="longList"></div>
+      </section>
     </div>
-    
-    <div class="days-container" id="daysContainer"></div>
-    
-    <div class="add-todo-section">
-      <button id="addTodoBtn" class="add-btn">+ 添加待办</button>
+
+    <div class="footer">
+      <button id="completedBtn" class="footer-btn">已完成 (<span id="completedCount">0</span>)</button>
+      <button id="archiveBtn" class="footer-btn">归档已完成</button>
     </div>
   </div>
-  
-  <div id="todoModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <span id="modalTitle">添加待办事项</span>
-        <span id="closeModal" class="close">&times;</span>
+
+  <div id="completedOverlay" class="overlay">
+    <div class="overlay-panel">
+      <div class="overlay-head">
+        <span>已完成 · 历史</span>
+        <span id="closeOverlay" class="close">×</span>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>选择日期</label>
-          <select id="todoDate"></select>
-        </div>
-        <div class="form-group">
-          <label>待办事项</label>
-          <input type="text" id="todoTitle" placeholder="输入待办事项">
-        </div>
-        <div class="form-group">
-          <label>关键操作</label>
-          <textarea id="todoNotes" placeholder="输入关键操作备注"></textarea>
-        </div>
+      <div class="overlay-body" id="completedList"></div>
+    </div>
+  </div>
+
+  <div id="settingsOverlay" class="overlay">
+    <div class="overlay-panel">
+      <div class="overlay-head">
+        <span>设置</span>
+        <span id="closeSettings" class="close">×</span>
       </div>
-      <div class="modal-footer">
-        <button id="cancelBtn" class="btn btn-secondary">取消</button>
-        <button id="saveBtn" class="btn btn-primary">保存</button>
+      <div class="overlay-body">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">开机启动</div>
+            <div class="setting-desc">系统登录时自动运行每周待办</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="autostartToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">桌面快捷方式</div>
+            <div class="setting-desc">在桌面创建「每周待办」快捷方式</div>
+          </div>
+          <button id="shortcutBtn" class="setting-action">创建</button>
+        </div>
+
+        <div id="settingsStatus" class="settings-status"></div>
       </div>
     </div>
   </div>
