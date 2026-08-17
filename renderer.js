@@ -42,6 +42,11 @@ function weekRangeLabel() {
 async function loadState() {
   const res = await ipcRenderer.invoke('load-todos');
   const data = res.success ? res.todos : null;
+  state.dataDir = res.dataDir || '';
+  // 若数据无法写入程序目录（如装在 Program Files），已回退到用户目录，提示一次
+  if (res.fallback && res.dataDir) {
+    setTimeout(() => toast('程序目录不可写，数据已改存到：\n' + res.dataDir), 500);
+  }
 
   if (Array.isArray(data)) {
     // 兼容旧版按天存储的格式
@@ -85,7 +90,28 @@ function checkWeekRollover() {
 }
 
 async function saveState() {
-  await ipcRenderer.invoke('save-todos', state);
+  const res = await ipcRenderer.invoke('save-todos', state);
+  if (res && res.success === false) {
+    toast('保存失败：' + (res.error || '未知错误'));
+  }
+}
+
+// 轻量提示条（无需额外 CSS）
+function toast(msg) {
+  let t = document.getElementById('wb-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'wb-toast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);' +
+      'background:rgba(20,20,20,.88);color:#fff;padding:8px 14px;border-radius:8px;' +
+      'font-size:13px;line-height:1.5;z-index:9999;max-width:90%;white-space:pre-line;' +
+      'pointer-events:none;opacity:0;transition:opacity .2s;box-shadow:0 4px 12px rgba(0,0,0,.25);';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3200);
 }
 
 // 把已完成条目移动到「已完成」归档，并从当前列表移除

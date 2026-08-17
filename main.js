@@ -7,9 +7,30 @@ let mainWindow;
 let tray = null;
 let isQuiting = false;
 
-// 便携模式：数据与窗口位置都保存在 exe 同目录（开发时落在项目目录）
+// 数据目录解析：优先用 exe 同目录（便携），若该目录不可写（如装在 Program Files）
+// 则自动回退到用户数据目录 userData，保证数据一定能落盘、不会静默丢失。
+let _resolvedDataDir = null;
+function resolveDataDir() {
+  if (_resolvedDataDir) return _resolvedDataDir;
+  const portable = app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath();
+  const candidates = [portable];
+  if (app.isPackaged) candidates.push(app.getPath('userData'));
+  for (const dir of candidates) {
+    try {
+      const probe = path.join(dir, '.wb_writetest_' + process.pid);
+      fs.writeFileSync(probe, '');
+      fs.unlinkSync(probe);
+      _resolvedDataDir = dir;
+      return dir;
+    } catch (e) {
+      // 该目录不可写，尝试下一个候选
+    }
+  }
+  _resolvedDataDir = portable; // 都不行时仍尝试便携目录（至少给出明确错误）
+  return _resolvedDataDir;
+}
 function appDir() {
-  return app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath();
+  return resolveDataDir();
 }
 function dataPath() {
   return path.join(appDir(), 'todos.json');
@@ -297,11 +318,14 @@ ipcMain.handle('load-todos', async () => {
   try {
     const dp = dataPath();
     migrateIfNeeded();
+    const dataDir = path.dirname(dp);
+    const portableDir = app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath();
+    const fallback = dataDir !== portableDir;
     if (fs.existsSync(dp)) {
       const data = fs.readFileSync(dp, 'utf8');
-      return { success: true, todos: JSON.parse(data) };
+      return { success: true, todos: JSON.parse(data), dataDir, fallback };
     }
-    return { success: true, todos: [] };
+    return { success: true, todos: [], dataDir, fallback };
   } catch (error) {
     return { success: false, error: error.message, todos: [] };
   }
