@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
@@ -221,6 +221,22 @@ function createWindow() {
   });
 
   if (!tray) createTray();
+
+  // 防护：若程序是从临时目录（Temp）运行的（常见于压缩包内直接双击、网盘/聊天窗口直接打开），
+  // 数据、开机启动、快捷方式都会指向临时路径，系统清理后全部失效。弹窗提醒用户从正式位置启动。
+  if (isRunningInTemp()) {
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: '程序正运行在临时目录',
+      message:
+        '当前程序是从 Windows 临时文件夹（Temp）启动的，并非你存放 exe 的正式位置。\n\n' +
+        '这会导致：\n' +
+        '• 数据（todos.json）保存在临时目录，系统清理或重启后丢失\n' +
+        '• 若开启「开机启动」，启动项会指向临时路径，重启后失效\n\n' +
+        '请关闭本程序，直接到你存放 exe 的正式目录（例如 E:\\ToDolist）双击启动。',
+      buttons: ['知道了']
+    });
+  }
 }
 
 // ---------- 系统托盘 ----------
@@ -261,6 +277,18 @@ function createTray() {
     else showWindow();
   });
   tray.on('double-click', () => showWindow());
+}
+
+// 检测是否从临时目录（Temp）运行：临时目录不能作为正式使用位置
+function isRunningInTemp() {
+  try {
+    const tmp = app.getPath('temp');
+    const exe = app.getPath('exe');
+    const rel = path.relative(tmp, exe);
+    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  } catch (e) {
+    return false;
+  }
 }
 
 app.on('ready', createWindow);
