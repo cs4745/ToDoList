@@ -1,4 +1,15 @@
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog } = require('electron');
+
+// electron-builder 的 portable 目标会把自身解压到 Temp 临时目录再运行，
+// 此时 app.getPath('exe') 指向 Temp 解压路径，而非用户存放 exe 的原始位置（E:\ToDolist 等）。
+// electron-builder 通过环境变量 PORTABLE_EXECUTABLE_DIR / PORTABLE_EXECUTABLE_FILE 暴露原始位置，统一用这两个取值。
+function originalExeFile() {
+  return process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe');
+}
+function originalExeDir() {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR;
+  return path.dirname(originalExeFile());
+}
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
@@ -12,7 +23,7 @@ let isQuiting = false;
 let _resolvedDataDir = null;
 function resolveDataDir() {
   if (_resolvedDataDir) return _resolvedDataDir;
-  const portable = app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath();
+  const portable = originalExeDir();
   const candidates = [portable];
   if (app.isPackaged) candidates.push(app.getPath('userData'));
   for (const dir of candidates) {
@@ -283,7 +294,7 @@ function createTray() {
 function isRunningInTemp() {
   try {
     const tmp = app.getPath('temp');
-    const exe = app.getPath('exe');
+    const exe = originalExeFile();
     const rel = path.relative(tmp, exe);
     return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
   } catch (e) {
@@ -333,6 +344,19 @@ function migrateIfNeeded() {
   }
 }
 
+// 从「解压到 Temp 的运行副本」抢救已有数据：旧版本把数据写在了 Temp 解压目录，
+// 切换到正确的原始 exe 目录后，把那份 todos.json 复制过来（不覆盖已有数据）。
+function migrateFromRunningTempIfNeeded(dp) {
+  if (fs.existsSync(dp)) return;
+  try {
+    const runningDir = path.dirname(app.getPath('exe')); // 当前运行的解压后 Temp 目录
+    const runningData = path.join(runningDir, 'todos.json');
+    if (runningData !== dp && fs.existsSync(runningData)) {
+      fs.copyFileSync(runningData, dp);
+    }
+  } catch (e) {}
+}
+
 ipcMain.handle('save-todos', async (event, todos) => {
   try {
     fs.writeFileSync(dataPath(), JSON.stringify(todos, null, 2));
@@ -346,8 +370,9 @@ ipcMain.handle('load-todos', async () => {
   try {
     const dp = dataPath();
     migrateIfNeeded();
+    migrateFromRunningTempIfNeeded(dp);
     const dataDir = path.dirname(dp);
-    const portableDir = app.isPackaged ? path.dirname(app.getPath('exe')) : app.getAppPath();
+    const portableDir = originalExeDir();
     const fallback = dataDir !== portableDir;
     if (fs.existsSync(dp)) {
       const data = fs.readFileSync(dp, 'utf8');
@@ -384,7 +409,7 @@ ipcMain.handle('set-autostart', (event, enabled) => {
     if (!app.isPackaged) {
       return { success: true, dev: true, enabled: !!enabled };
     }
-    app.setLoginItemSettings({ openAtLogin: !!enabled });
+    app.setLoginItemSettings({ openAtLogin: !!enabled, path: originalExeFile() });
     return { success: true, enabled: !!enabled };
   } catch (e) {
     return { success: false, error: e.message };
@@ -394,7 +419,7 @@ ipcMain.handle('set-autostart', (event, enabled) => {
 // ---------- 设置：桌面快捷方式 ----------
 ipcMain.handle('create-shortcut', async () => {
   try {
-    const exePath = app.getPath('exe');
+    const exePath = originalExeFile();
     const desktop = app.getPath('desktop');
     const linkPath = path.join(desktop, '每周待办.lnk');
     const workDir = path.dirname(exePath);
