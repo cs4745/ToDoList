@@ -1,6 +1,6 @@
 {
   "name": "weekly-todo-widget",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Windows桌面组件 - 每周待办事项管理",
   "main": "main.js",
   "scripts": {
