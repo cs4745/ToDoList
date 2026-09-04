@@ -9,6 +9,11 @@ let state = {
 
 let focusNewId = null;
 
+// 拖拽排序状态
+let draggedId = null;
+let draggedCat = null;
+let dragOverAfter = false;
+
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 function mondayOf(d) {
@@ -169,6 +174,14 @@ function createRow(item, category) {
   row.className = 'todo-row' + (item.done ? ' done' : '');
   row.dataset.id = item.id;
 
+  const handle = document.createElement('div');
+  handle.className = 'todo-handle';
+  handle.textContent = '☰';
+  handle.title = '拖动调整顺序';
+  handle.draggable = true;
+  handle.addEventListener('dragstart', (e) => onDragStart(e, item, category, row));
+  handle.addEventListener('dragend', (e) => onDragEnd(e, row));
+
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.className = 'todo-check';
@@ -199,8 +212,85 @@ function createRow(item, category) {
   del.title = '删除';
   del.addEventListener('click', () => deleteItem(item, category));
 
-  row.append(cb, text, note, del);
+  row.append(handle, cb, text, note, del);
+
+  row.addEventListener('dragover', (e) => onDragOver(e, item, row));
+  row.addEventListener('dragleave', (e) => onDragLeave(e, row));
+  row.addEventListener('drop', (e) => onDrop(e, item, category, row));
+
   return row;
+}
+
+// ---------- 拖拽排序 ----------
+function clearDropMarkers() {
+  document.querySelectorAll('.drop-before, .drop-after')
+    .forEach(r => r.classList.remove('drop-before', 'drop-after'));
+}
+function clearDragState() {
+  document.querySelectorAll('.dragging').forEach(r => r.classList.remove('dragging'));
+  clearDropMarkers();
+  draggedId = null;
+  draggedCat = null;
+}
+
+function onDragStart(e, item, category, row) {
+  e.stopPropagation();
+  draggedId = item.id;
+  draggedCat = category;
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', item.id); } catch (_) {}
+  setTimeout(() => row.classList.add('dragging'), 0);
+}
+
+function onDragOver(e, item, row) {
+  if (!draggedId || draggedId === item.id) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const r = row.getBoundingClientRect();
+  const after = (e.clientY - r.top) > r.height / 2;
+  dragOverAfter = after;
+  clearDropMarkers();
+  row.classList.add(after ? 'drop-after' : 'drop-before');
+}
+
+function onDragLeave(e, row) {
+  if (row.contains(e.relatedTarget)) return; // 仍在行内移动
+  row.classList.remove('drop-before', 'drop-after');
+}
+
+function onDrop(e, item, category, row) {
+  e.preventDefault();
+  row.classList.remove('drop-before', 'drop-after');
+  if (!draggedId) return;
+  const after = dragOverAfter;
+  const srcId = draggedId, srcCat = draggedCat;
+  clearDragState();
+  if (srcId === item.id && srcCat === category) return;
+  moveItem(srcId, srcCat, item.id, category, after);
+}
+
+function onDragEnd() {
+  clearDragState();
+}
+
+async function moveItem(srcId, srcCat, targetId, targetCat, after) {
+  if (srcId === targetId) return;
+  const srcList = srcCat === 'short' ? state.shortTerm : state.longTerm;
+  const tgtList = targetCat === 'short' ? state.shortTerm : state.longTerm;
+  const from = srcList.findIndex(t => t.id === srcId);
+  if (from < 0) return;
+  const [moved] = srcList.splice(from, 1);
+  let to;
+  if (targetId == null) {
+    to = tgtList.length;
+  } else {
+    to = tgtList.findIndex(t => t.id === targetId);
+    if (to < 0) to = tgtList.length;
+    if (after) to += 1;
+  }
+  tgtList.splice(to, 0, moved);
+  await saveState();
+  render();
 }
 
 // ---------- 操作 ----------
@@ -377,6 +467,24 @@ function setup() {
   });
   document.getElementById('autostartToggle').addEventListener('change', onAutostartChange);
   document.getElementById('shortcutBtn').addEventListener('click', onCreateShortcut);
+  // 列表容器：拖到列表空白/空列表时，把条目追加到该列表末尾
+  ['shortList', 'longList'].forEach((id) => {
+    const cat = id === 'shortList' ? 'short' : 'long';
+    const el = document.getElementById(id);
+    el.addEventListener('dragover', (e) => {
+      if (!draggedId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    el.addEventListener('drop', async (e) => {
+      if (!draggedId) return;
+      if (e.target.id !== id) return; // 仅当落在容器自身（而非某行）上
+      e.preventDefault();
+      const srcId = draggedId, srcCat = draggedCat;
+      clearDragState();
+      await moveItem(srcId, srcCat, null, cat, true);
+    });
+  });
   setupDrag();
 }
 
