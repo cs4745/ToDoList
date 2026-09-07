@@ -443,3 +443,104 @@ ipcMain.handle('create-shortcut', async () => {
     return { success: false, error: e.message };
   }
 });
+
+// ---------- 导出每周工作内容为 HTML ----------
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function fmtD(s) {
+  if (!s) return '';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function fmtDT(s) {
+  if (!s) return '';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${fmtD(s)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function buildWeeklyHtml(p) {
+  p = p || {};
+  const weekLabel = p.weekLabel || '';
+  const short = Array.isArray(p.shortTerm) ? p.shortTerm : [];
+  const long = Array.isArray(p.longTerm) ? p.longTerm : [];
+  const completed = (Array.isArray(p.completed) ? p.completed : [])
+    .slice()
+    .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+
+  const rowHtml = (it) => {
+    const done = it.done ? 'done' : '';
+    const mark = it.done ? '✓' : '○';
+    const note = it.note ? `<span class="note">${escapeHtml(it.note)}</span>` : '';
+    return `<li class="${done}"><span class="mark">${mark}</span><span class="text">${escapeHtml(it.text)}</span>${note}</li>`;
+  };
+  const completedHtml = completed.map((c) => {
+    const cat = c.category === 'short' ? '本周' : '长期';
+    return `<li><span class="text">${escapeHtml(c.text || '')}</span><span class="meta">${cat} · 完成 ${fmtDT(c.completedAt)}</span></li>`;
+  }).join('');
+  const now = fmtDT(new Date().toISOString());
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>每周工作内容 · ${escapeHtml(weekLabel)}</title>
+<style>
+  body { font-family: 'Segoe UI','Microsoft YaHei',sans-serif; background:#f4f6f9; color:#212529; margin:0; padding:32px; }
+  .wrap { max-width:760px; margin:0 auto; background:#fff; border-radius:14px; box-shadow:0 8px 32px rgba(0,0,0,.08); padding:32px 36px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .week { color:#667eea; font-size:14px; margin-bottom:24px; }
+  h2 { font-size:16px; margin:24px 0 12px; padding-left:10px; border-left:4px solid #667eea; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:baseline; gap:10px; padding:8px 10px; border-radius:8px; }
+  li:nth-child(odd) { background:#f8f9fa; }
+  .mark { color:#667eea; font-weight:700; width:16px; flex:0 0 auto; }
+  li.done .mark, li.done .text { color:#adb5bd; text-decoration:line-through; }
+  .text { flex:1; }
+  .note { color:#868e96; font-size:12px; }
+  .meta { color:#adb5bd; font-size:12px; }
+  .empty { color:#adb5bd; font-size:13px; padding:8px 10px; }
+  .foot { margin-top:28px; color:#adb5bd; font-size:12px; text-align:right; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>每周工作内容</h1>
+    <div class="week">${escapeHtml(weekLabel)} · 导出时间 ${escapeHtml(now)}</div>
+    <h2>本周任务</h2>
+    ${short.length ? `<ul>${short.map(rowHtml).join('')}</ul>` : '<div class="empty">暂无</div>'}
+    <h2>长期任务</h2>
+    ${long.length ? `<ul>${long.map(rowHtml).join('')}</ul>` : '<div class="empty">暂无</div>'}
+    <h2>已完成归档（${completed.length}）</h2>
+    ${completed.length ? `<ul>${completedHtml}</ul>` : '<div class="empty">暂无已完成记录</div>'}
+    <div class="foot">由「每周待办」生成</div>
+  </div>
+</body>
+</html>`;
+}
+
+ipcMain.handle('export-weekly-html', async (event, payload) => {
+  try {
+    const html = buildWeeklyHtml(payload);
+    const stamp = (payload && payload.weekStart) ? payload.weekStart : fmtD(new Date().toISOString());
+    const defaultName = `每周工作内容_${stamp}.html`;
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: '导出每周工作内容',
+      defaultPath: defaultName,
+      filters: [{ name: 'HTML 网页', extensions: ['html'] }]
+    });
+    if (canceled || !filePath) return { success: false, canceled: true };
+    fs.writeFileSync(filePath, html, 'utf8');
+    return { success: true, path: filePath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});

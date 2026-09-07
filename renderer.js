@@ -332,6 +332,25 @@ async function archiveNow() {
   render();
 }
 
+// ---------- 导出每周工作内容为 HTML ----------
+async function exportWeeklyHtml() {
+  const payload = {
+    weekStart: state.weekStart,
+    shortTerm: state.shortTerm,
+    longTerm: state.longTerm,
+    completed: state.completed,
+    weekLabel: weekRangeLabel()
+  };
+  const res = await ipcRenderer.invoke('export-weekly-html', payload);
+  if (res && res.success) {
+    toast('已导出到：\n' + res.path);
+  } else if (res && res.canceled) {
+    // 用户取消保存，静默处理
+  } else {
+    toast('导出失败：' + ((res && res.error) || '未知错误'));
+  }
+}
+
 // ---------- 已完成归档面板 ----------
 function openCompleted() {
   const el = document.getElementById('completedList');
@@ -455,6 +474,7 @@ function setup() {
     btn.addEventListener('click', () => addItem(btn.dataset.cat));
   });
   document.getElementById('archiveBtn').addEventListener('click', archiveNow);
+  document.getElementById('exportBtn').addEventListener('click', exportWeeklyHtml);
   document.getElementById('completedBtn').addEventListener('click', openCompleted);
   document.getElementById('closeOverlay').addEventListener('click', closeCompleted);
   document.getElementById('completedOverlay').addEventListener('click', (e) => {
