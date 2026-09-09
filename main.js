@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 
 // electron-builder 的 portable 目标会把自身解压到 Temp 临时目录再运行，
 // 此时 app.getPath('exe') 指向 Temp 解压路径，而非用户存放 exe 的原始位置（E:\ToDolist 等）。
@@ -233,6 +234,8 @@ function createWindow() {
 
   if (!tray) createTray();
 
+  setupAutoUpdater();
+
   // 防护：若程序是从临时目录（Temp）运行的（常见于压缩包内直接双击、网盘/聊天窗口直接打开），
   // 数据、开机启动、快捷方式都会指向临时路径，系统清理后全部失效。弹窗提醒用户从正式位置启动。
   if (isRunningInTemp()) {
@@ -279,6 +282,7 @@ function createTray() {
   tray.setToolTip('每周待办');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '显示窗口', click: () => showWindow() },
+    { label: '检查更新', click: () => { try { if (app.isPackaged) autoUpdater.checkForUpdates(); } catch (e) {} } },
     { type: 'separator' },
     { label: '退出', click: () => { isQuiting = true; app.quit(); } }
   ]));
@@ -542,5 +546,72 @@ ipcMain.handle('export-weekly-html', async (event, payload) => {
     return { success: true, path: filePath };
   } catch (e) {
     return { success: false, error: e.message };
+  }
+});
+
+// ---------- 软件自动更新（electron-updater + GitHub Releases） ----------
+// 仅在打包后的 exe 中启用；开发模式（electron .）不加载，避免无更新源时报错。
+function sendUpdateStatus(payload) {
+  if (mainWindow && mainWindow.webContents) {
+    try { mainWindow.webContents.send('update-status', payload); } catch (e) {}
+  }
+}
+
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+  try {
+    autoUpdater.autoDownload = true;          // 发现新版本自动下载
+    autoUpdater.autoInstallOnAppQuit = true;  // 退出时自动安装（portable 会替换 exe）
+    autoUpdater.allowDowngrade = false;
+
+    autoUpdater.on('update-available', (info) => {
+      const v = (info && info.version) || '';
+      sendUpdateStatus({ type: 'available', version: v });
+    });
+    autoUpdater.on('update-not-available', (info) => {
+      sendUpdateStatus({ type: 'not-available', version: app.getVersion() });
+    });
+    autoUpdater.on('download-progress', (p) => {
+      sendUpdateStatus({ type: 'progress', percent: Math.floor(p.percent || 0) });
+    });
+    autoUpdater.on('update-downloaded', (info) => {
+      const v = (info && info.version) || '';
+      sendUpdateStatus({ type: 'downloaded', version: v });
+      if (mainWindow) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: '更新就绪',
+          message: `新版本 ${v} 已下载完成，是否立即重启以应用更新？`,
+          buttons: ['立即重启', '稍后'],
+          defaultId: 0,
+          cancelId: 1
+        }).then(({ response }) => {
+          if (response === 0) autoUpdater.quitAndInstall();
+        });
+      }
+    });
+    autoUpdater.on('error', (err) => {
+      sendUpdateStatus({ type: 'error', message: (err && err.message) ? err.message : String(err) });
+    });
+
+    // 启动后静默检查一次（仅当有更新时才提示，无更新不打扰）
+    setTimeout(() => {
+      try { autoUpdater.checkForUpdates(); } catch (e) {}
+    }, 5000);
+  } catch (e) {
+    console.error('setupAutoUpdater failed:', e);
+  }
+}
+
+// 手动「检查更新」入口（托盘菜单 / 底部按钮触发）
+ipcMain.handle('check-for-updates', async () => {
+  if (!app.isPackaged) {
+    return { dev: true, message: '开发模式下不检查更新（打包后生效）' };
+  }
+  try {
+    await autoUpdater.checkForUpdates();
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: (e && e.message) ? e.message : String(e) };
   }
 });

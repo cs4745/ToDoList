@@ -351,6 +351,33 @@ async function exportWeeklyHtml() {
   }
 }
 
+// ---------- 软件更新 ----------
+async function checkUpdate() {
+  const res = await ipcRenderer.invoke('check-for-updates');
+  if (res && res.dev) {
+    toast('开发模式下不检查更新（打包后生效）');
+  } else if (res && res.success) {
+    toast('正在检查更新…');
+  } else {
+    toast('检查更新失败：' + ((res && res.error) || '未知错误'));
+  }
+}
+
+function onUpdateStatus(p) {
+  if (!p) return;
+  if (p.type === 'available') {
+    toast('发现新版本 v' + (p.version || '') + '，开始下载…');
+  } else if (p.type === 'not-available') {
+    toast('已是最新版本 v' + (p.version || ''));
+  } else if (p.type === 'progress') {
+    toast('正在下载更新… ' + (p.percent || 0) + '%');
+  } else if (p.type === 'downloaded') {
+    toast('更新已下载，重启后生效');
+  } else if (p.type === 'error') {
+    toast('更新出错：' + (p.message || '未知错误'));
+  }
+}
+
 // ---------- 已完成归档面板 ----------
 function openCompleted() {
   const el = document.getElementById('completedList');
@@ -475,6 +502,8 @@ function setup() {
   });
   document.getElementById('archiveBtn').addEventListener('click', archiveNow);
   document.getElementById('exportBtn').addEventListener('click', exportWeeklyHtml);
+  document.getElementById('updateBtn').addEventListener('click', checkUpdate);
+  ipcRenderer.on('update-status', (e, p) => onUpdateStatus(p));
   document.getElementById('completedBtn').addEventListener('click', openCompleted);
   document.getElementById('closeOverlay').addEventListener('click', closeCompleted);
   document.getElementById('completedOverlay').addEventListener('click', (e) => {
