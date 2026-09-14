@@ -368,7 +368,7 @@ function onUpdateStatus(p) {
   if (p.type === 'available') {
     toast('发现新版本 v' + (p.version || '') + '，开始下载…');
   } else if (p.type === 'not-available') {
-    toast('已是最新版本 v' + (p.version || ''));
+    if (!p.silent) toast('已是最新版本 v' + (p.version || ''));
   } else if (p.type === 'progress') {
     toast('正在下载更新… ' + (p.percent || 0) + '%');
   } else if (p.type === 'downloaded') {

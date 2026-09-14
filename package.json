@@ -1,6 +1,6 @@
 {
   "name": "weekly-todo-widget",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Windows桌面组件 - 每周待办事项管理",
   "main": "main.js",
   "scripts": {
@@ -59,8 +59,5 @@
   "devDependencies": {
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1"
-  },
-  "dependencies": {
-    "electron-updater": "^6.8.9"
   }
 }

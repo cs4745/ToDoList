@@ -1,5 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog } = require('electron');
-const { autoUpdater } = require('electron-updater');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, dialog, net } = require('electron');
 
 // electron-builder 的 portable 目标会把自身解压到 Temp 临时目录再运行，
 // 此时 app.getPath('exe') 指向 Temp 解压路径，而非用户存放 exe 的原始位置（E:\ToDolist 等）。
@@ -282,7 +281,7 @@ function createTray() {
   tray.setToolTip('每周待办');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '显示窗口', click: () => showWindow() },
-    { label: '检查更新', click: () => { try { if (app.isPackaged) autoUpdater.checkForUpdates(); } catch (e) {} } },
+    { label: '检查更新', click: () => { runUpdateCheck(true); } },
     { type: 'separator' },
     { label: '退出', click: () => { isQuiting = true; app.quit(); } }
   ]));
@@ -549,69 +548,155 @@ ipcMain.handle('export-weekly-html', async (event, payload) => {
   }
 });
 
-// ---------- 软件自动更新（electron-updater + GitHub Releases） ----------
-// 仅在打包后的 exe 中启用；开发模式（electron .）不加载，避免无更新源时报错。
+// ---------- 软件自动更新（GitHub Releases API + 便携自替换） ----------
+// 根因说明：portable 目标不会在 resources 里生成 app-update.yml，
+// 而 electron-updater 的 Windows 更新器无条件读取该文件 → ENOENT。
+// 因此放弃 electron-updater，改用 GitHub API 查版本 + 直接替换 exe 的自更新方案。
+const UPDATE_REPO = { owner: 'cs4745', repo: 'ToDoList' };
+
 function sendUpdateStatus(payload) {
   if (mainWindow && mainWindow.webContents) {
     try { mainWindow.webContents.send('update-status', payload); } catch (e) {}
   }
 }
 
-function setupAutoUpdater() {
+function cmpVersion(a, b) {
+  const pa = String(a || '').split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+  }
+  return 0;
+}
+
+let updateChecking = false;
+let pendingUpdate = null; // { version, file, exePath }
+
+async function fetchLatestRelease() {
+  const url = `https://api.github.com/repos/${UPDATE_REPO.owner}/${UPDATE_REPO.repo}/releases/latest`;
+  const res = await net.fetch(url, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'weekly-todo-app' }
+  });
+  if (!res.ok) throw new Error('无法获取版本信息 (HTTP ' + res.status + ')');
+  const data = await res.json();
+  const version = String(data.tag_name || '').replace(/^v/, '');
+  const assets = Array.isArray(data.assets) ? data.assets : [];
+  let asset = assets.find((a) => a.name === `WeeklyTodo-${version}-portable.exe`) || null;
+  if (!asset) asset = assets.find((a) => /-portable\.exe$/i.test(a.name)) || null;
+  return { version, asset };
+}
+
+async function downloadUpdate(asset, version) {
+  const tmpPath = path.join(app.getPath('temp'), `weekly-todo-update-${version}.exe`);
+  try {
+    // 已下载过同版本（上次选了「稍后」）则直接复用
+    if (fs.existsSync(tmpPath) && (!asset.size || fs.statSync(tmpPath).size === asset.size)) return tmpPath;
+  } catch (e) {}
+  const res = await net.fetch(asset.browser_download_url);
+  if (!res.ok || !res.body) throw new Error('下载更新失败 (HTTP ' + res.status + ')');
+  const total = Number(res.headers.get('content-length')) || asset.size || 0;
+  const out = fs.createWriteStream(tmpPath);
+  const reader = res.body.getReader();
+  let received = 0;
+  let lastSent = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    out.write(Buffer.from(value));
+    if (total && received - lastSent > total * 0.02) {
+      lastSent = received;
+      sendUpdateStatus({ type: 'progress', percent: Math.min(99, Math.floor((received / total) * 100)) });
+    }
+  }
+  await new Promise((resolve) => out.end(resolve));
+  if (total && fs.statSync(tmpPath).size !== total) throw new Error('下载不完整，请重试');
+  return tmpPath;
+}
+
+// 原地替换 exe：把旧 exe 改名 .old（运行中的 exe 也允许改名），新 exe 落到原位，再重启
+function applyUpdate(updateFile, exePath) {
+  const oldPath = exePath + '.old';
+  try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch (e) {}
+  let renamed = false;
+  try { fs.renameSync(exePath, oldPath); renamed = true; } catch (e) {}
+  try {
+    fs.copyFileSync(updateFile, exePath);
+  } catch (e) {
+    if (renamed) { try { fs.renameSync(oldPath, exePath); } catch (e2) {} }
+    throw new Error('无法写入程序目录（可能没有权限），请手动到 Release 页下载：' + e.message);
+  }
+  try { fs.unlinkSync(oldPath); } catch (e) {}
+  try {
+    const { spawn } = require('child_process');
+    const child = spawn(exePath, [], { detached: true, stdio: 'ignore', cwd: path.dirname(exePath) });
+    child.unref();
+  } catch (e) {}
+  isQuiting = true;
+  app.quit();
+}
+
+function cleanupOldExe() {
   if (!app.isPackaged) return;
   try {
-    autoUpdater.autoDownload = true;          // 发现新版本自动下载
-    autoUpdater.autoInstallOnAppQuit = true;  // 退出时自动安装（portable 会替换 exe）
-    autoUpdater.allowDowngrade = false;
+    const oldPath = originalExeFile() + '.old';
+    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+  } catch (e) {}
+}
 
-    autoUpdater.on('update-available', (info) => {
-      const v = (info && info.version) || '';
-      sendUpdateStatus({ type: 'available', version: v });
-    });
-    autoUpdater.on('update-not-available', (info) => {
-      sendUpdateStatus({ type: 'not-available', version: app.getVersion() });
-    });
-    autoUpdater.on('download-progress', (p) => {
-      sendUpdateStatus({ type: 'progress', percent: Math.floor(p.percent || 0) });
-    });
-    autoUpdater.on('update-downloaded', (info) => {
-      const v = (info && info.version) || '';
-      sendUpdateStatus({ type: 'downloaded', version: v });
-      if (mainWindow) {
-        dialog.showMessageBox(mainWindow, {
-          type: 'info',
-          title: '更新就绪',
-          message: `新版本 ${v} 已下载完成，是否立即重启以应用更新？`,
-          buttons: ['立即重启', '稍后'],
-          defaultId: 0,
-          cancelId: 1
-        }).then(({ response }) => {
-          if (response === 0) autoUpdater.quitAndInstall();
-        });
-      }
-    });
-    autoUpdater.on('error', (err) => {
-      sendUpdateStatus({ type: 'error', message: (err && err.message) ? err.message : String(err) });
-    });
-
-    // 启动后静默检查一次（仅当有更新时才提示，无更新不打扰）
-    setTimeout(() => {
-      try { autoUpdater.checkForUpdates(); } catch (e) {}
-    }, 5000);
+// manual=true：来自托盘/按钮的主动检查（结果一定提示）；false：启动静默检查（已是最新则不打扰）
+async function runUpdateCheck(manual) {
+  if (!app.isPackaged) return;
+  if (updateChecking) return;
+  updateChecking = true;
+  try {
+    const { version, asset } = await fetchLatestRelease();
+    if (!version || cmpVersion(version, app.getVersion()) <= 0) {
+      sendUpdateStatus({ type: 'not-available', version: app.getVersion(), silent: !manual });
+      return;
+    }
+    if (!asset) {
+      sendUpdateStatus({ type: 'error', message: '新版本 ' + version + ' 未找到便携版附件' });
+      return;
+    }
+    sendUpdateStatus({ type: 'available', version });
+    const file = await downloadUpdate(asset, version);
+    pendingUpdate = { version, file, exePath: originalExeFile() };
+    sendUpdateStatus({ type: 'downloaded', version });
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: '更新就绪',
+        message: `新版本 ${version} 已下载完成，是否立即重启以应用更新？`,
+        buttons: ['立即重启', '稍后'],
+        defaultId: 0,
+        cancelId: 1
+      }).then(({ response }) => {
+        if (response === 0 && pendingUpdate) {
+          try { applyUpdate(pendingUpdate.file, pendingUpdate.exePath); }
+          catch (e) { sendUpdateStatus({ type: 'error', message: e.message }); }
+        }
+      });
+    }
   } catch (e) {
-    console.error('setupAutoUpdater failed:', e);
+    sendUpdateStatus({ type: 'error', message: (e && e.message) ? e.message : String(e) });
+  } finally {
+    updateChecking = false;
   }
 }
 
-// 手动「检查更新」入口（托盘菜单 / 底部按钮触发）
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+  cleanupOldExe();
+  setTimeout(() => { runUpdateCheck(false); }, 5000);
+}
+
+// 手动「检查更新」入口（底部按钮触发）
 ipcMain.handle('check-for-updates', async () => {
   if (!app.isPackaged) {
     return { dev: true, message: '开发模式下不检查更新（打包后生效）' };
   }
-  try {
-    await autoUpdater.checkForUpdates();
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: (e && e.message) ? e.message : String(e) };
-  }
+  runUpdateCheck(true);
+  return { success: true };
 });

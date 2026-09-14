@@ -3,14 +3,7 @@ node_modules/
 
 # Build output
 dist/
-dist_build/
-dist_build2/
-dist_build3/
-dist_build4/
-dist_build5/
-dist_build6/
-dist_build7/
-dist_build8/
+dist_build*/
 out_*/
 release/
 

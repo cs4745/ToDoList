@@ -27,8 +27,8 @@ jobs:
         run: npm ci
 
       - name: Build and publish to GitHub Releases
-        # electron-builder 直接发布：自动上传 portable exe + latest-portable.yml + blockmap，
-        # 供应用内 electron-updater 检测并下载新版本。
+        # electron-builder 直接发布：上传 portable exe 到 GitHub Release。
+        # v1.4.1 起应用内更新为自研方案（GitHub API 查版本 + 原地替换 exe），不依赖 yml 元数据。
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --x64 -p always
